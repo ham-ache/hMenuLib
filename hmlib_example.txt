@@ -1,0 +1,107 @@
+--@name hmlib example
+--@author hamache
+--@client
+--@include hmenulib.txt
+require 'hmenulib.txt'
+print('hMenuLib example for v1.1')
+
+if player() == owner() then enableHud(nil,true) else return end
+local tw2 = hml.new(410,200,500,300,{})
+
+local surl = 'https://cdn.discordapp.com/attachments/1246842480687841375/1349335725656641576/image.png?ex=67d2ba52&is=67d168d2&hm=21915f0c74c62f030a2c99c857d682b1bf8308a905ea994725fe5890851675f1&'
+local Img_mat = render.createMaterial(surl, function() end, function(t,_) return end)
+
+local tw = hml.new(1010,200,500,300,{
+    color = Color(0,10,17,100),
+    icolor = Color(100,200,165,255),
+    icolorA = 30,
+    label = 'a stupid window',
+    lfont = render.createFont('Akbar', 20, 900, false, false, false, false),
+    open = true,
+    focus = true,
+    drawfunc = function(win, fx, fy, fw, fh)
+        render.setColor(Color(255,255,255,255)) 
+        render.setMaterial(Img_mat)
+        render.drawTexturedRect(fx,fy,2700*fw/500,900*fh/300)
+    end
+    --sfegblur = false
+})
+tw:editTable({
+    label = 'a stupid window '..tw.x..'/'..tw.y
+})
+tw2:editTable({
+    label = 'Default Window'
+})
+local f2 = render.createFont('Consolas', 16, 900, false, false, false, false)
+for xx = 1, 6 do
+    tw:newelement('button', {
+                    x = 30, 
+                    y = 15,
+                    color = nil, 
+                    w = -350, 
+                    h = 20, 
+                    func = function() print('clicked '..xx) end,
+                    text = 'stupid button '..xx,
+                    font = render.createFont('Akbar', 20, 900, false, false, false, false),
+                    centery = xx/4,
+                    strw = 2, 
+                    strh = 0.05
+                }
+            )
+    local b = tw:newelement('text', {
+        x = -20, 
+        y = 20, 
+        color = false, 
+        text = 'a stupid text for a stupid button '..xx, 
+        font = f2, 
+        centerx = 2, 
+        centery = xx/4, 
+        align = 2
+    })
+    --b:destroy()
+end
+local tww = hml.new(760,500,400,500,{
+    color = Color(255,245,215,150),
+    icolor = Color(45,25,0,255),
+    icolorA = 180,
+    label = 'hmLib info',
+    lfont = render.createFont('Consolas', 20, 900, false, false, false, false),
+    open = true,
+    focus = true,
+    lockscale = false
+})
+
+hml.hook.add('onResize','hmlexample',function(win, w, h)
+    print('hook onResize triggered: ', win.index, w, h)
+end)
+hml.hook.add('onMove','hmlexample',function(win, x, y)
+    print('hook onMove triggered: ', win.index, x, y)
+    if win ~= tw then return end
+    tw:editTable({
+        label = 'a stupid window: '..x..'/'..y
+    })
+end)
+hml.hook.add('onState','hmlexample',function(win, c)
+    print('hook onState triggered: ', win.index, c)
+end)
+
+local headerfont = render.createFont('Akbar', 40, 900, true, false, false, false)
+local textfont = render.createFont('Akbar', 40, 900, true, false, false, false)
+tww:newelement('text',{
+    x = 0,
+    y = 20,
+    text = 'hMenuLib by hamache\n'..hml.version,
+    font = headerfont,
+    centerx = 1,
+    align = 1
+})
+
+
+hook.add('inputpressed','openWindow',function(k)
+    if k == 17 then
+        local t = hml.allclosed()
+        for _, w in pairs(hml.instances) do
+            w:state(t)
+        end
+    end
+end)
