@@ -8,11 +8,11 @@ print('hMenuLib example for v1.1')
 if player() == owner() then enableHud(nil,true) else return end
 local tw2 = hml.new(410,200,500,300,{})
 
-local surl = 'https://cdn.discordapp.com/attachments/1246842480687841375/1349335725656641576/image.png?ex=67d2ba52&is=67d168d2&hm=21915f0c74c62f030a2c99c857d682b1bf8308a905ea994725fe5890851675f1&'
+local surl = 'https://cdn.discordapp.com/attachments/1246842480687841375/1349396351338680431/background.png?ex=67d2f2c8&is=67d1a148&hm=cdcdd42c672caa8dd2c432f452fdfbafc04968c69538abe40b32c4ad8d395453&'
 local Img_mat = render.createMaterial(surl, function() end, function(t,_) return end)
 
 local tw = hml.new(1010,200,500,300,{
-    color = Color(0,10,17,100),
+    color = Color(0,10,17,150),
     icolor = Color(100,200,165,255),
     icolorA = 30,
     label = 'a stupid window',
@@ -20,9 +20,9 @@ local tw = hml.new(1010,200,500,300,{
     open = true,
     focus = true,
     drawfunc = function(win, fx, fy, fw, fh)
-        render.setColor(Color(255,255,255,255)) 
+        render.setColor(Color(255,255,255,105)) 
         render.setMaterial(Img_mat)
-        render.drawTexturedRect(fx,fy,2700*fw/500,900*fh/300)
+        render.drawTexturedRect(fx,fy,fw*3,fh*6)
     end
     --sfegblur = false
 })

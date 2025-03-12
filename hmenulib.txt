@@ -353,8 +353,8 @@ function hml:draw()
     if self.h > 32 then
         r.drawRect(self.x+4,self.y+28,self.w-8,self.h-32)
         r.col(self.icol_transp)
-        local fx, fy, fw, fh = self.x+6, self.y+30, self.w-8, self.h-32
-        r.drawRectOutline(fx-2,fy-2,fw,fh)
+        local fx, fy, fw, fh = self.x+6, self.y+30, self.w-8, self.h-5
+        r.drawRectOutline(fx-2,fy-2,fw,fh-27)
         r.enableScissorRect(fx,fy,self.x+fw,self.y+fh)
             self.dp.drawfunc(self, fx, fy, fw, fh)
             for _, c in pairs(self.contents) do
