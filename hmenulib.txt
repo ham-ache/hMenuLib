@@ -1,0 +1,481 @@
+--@name hMenuLib
+--@author hamache
+--@shared
+--[[
+
+            hMenuLib by hamache
+            v1.1.1
+            
+            hMenuLib: https://steamcommunity.com/sharedfiles/filedetails/?id=3406355320
+            hMenuLib example: https://steamcommunity.com/sharedfiles/filedetails/?id=3439675552
+        
+        TODO:
+            make element creation easier,
+            new elements:
+                material rectangle,
+                text input label,
+                checkmarks,
+                splitting panels
+        
+        ////////
+        
+            HOOKS :
+                -- override these global functions with yours
+                    onState(window, state)
+                    onResize(window, w, h, order, ow, oh)
+                    onMove(window, x, y, order, ox, oy)
+                    
+                    add them using hml.hook.add('name','index',function(stuff, args, etc) ...... end)
+        
+            hml = hml.new(x, y, w, h, table data)
+                     -- creates a new window.
+                        you can insert a table of configurations in table data:
+                        color     - primary color
+                        icolor    - secondary color
+                        label     - window title
+                        lfont     - window title font
+                        icolorA   - secondary color alpha for transparent version
+                        focus     - enable cursor on window open?
+                        open      - set first state
+                        minw      - minimal width
+                        minh      - minimal height
+                        lockpos   - make window static
+                        lockscale - lock window scaling
+                        sfegblur  - enable sfExGIGA blur
+                        drawfunc  - function for drawing your stuff inside the window (available args: window, framex, framey, framew, frameh)
+            
+            hml:editTable(table data)
+                    -- edits configurations table
+                    
+            hml:destroy()
+                    -- removes a window completely
+                    
+            hml:state(bool)
+                    -- open/close the window
+            
+            ////////// ELEMENT MANIPULATION
+            
+            hml:newelement(etype, x, y, ...)
+                    -- creates an element inside the window.
+                    currently there are only 2 element types:
+                        'button':
+                            ...color, width, height,
+                            function, text, text font,
+                            centerX, centerY,
+                            stretchW, stretchH
+                        'text':
+                            ...color, text, font,
+                            centerx, centery,
+                            align
+                        
+                    --centerX will move the object based on the 
+                      fraction between 0-2 of the window width
+                    --centerY will move the object based on the 
+                      fraction between 0-2 of the window height
+                    --strecthW will stretch the object based on the 
+                      fraction between 0-2 of the window width
+                    --strecthH will stretch the object based on the 
+                      fraction between 0-2 of the window height
+            
+            hmle:editTable(table config)
+                    -- edits element's arguments.
+            
+            hmle:destroy()
+                    -- removes an element completely
+                    
+]]--
+
+if not CLIENT then return end
+
+local r = render
+      r.col = r.setColor
+
+local function setCA(c,a)
+    return Color(c.r,c.g,c.b,a)
+end
+
+local fontX = r.createFont('Verdana', 20, 900, false, false, true, true)
+
+local hmlDefaults = {
+    window = {
+        icolor = Color(255,255,255,255),
+        color = Color(0,0,0,200),
+        label = 'Window',
+        lfont = fontX,
+        icolorA = 50,
+        lockpos = false,
+        lockscale = false,
+        minw = 150,
+        minh = 30,
+        focus = true,
+        open = true,
+        sfegblur = true,
+        drawfunc = function() end
+    }
+}
+
+hml = {}
+hml.__index = hml
+hml.version = 'v1.1.1'
+hml.instances = {}
+hml.instances_ordered = {}
+hml.tophover = nil
+
+hmle = {}
+hmle.__index = hmle
+
+hml.hook = {}
+
+local function hml_hookinit(...)
+    local names = {...}
+    for _, h in pairs(names) do
+        hml.hook[h] = {}
+    end
+end
+
+local function hml_hookcall(name, ...)
+    for x, hk in pairs(hml.hook[name]) do
+        hk(...)
+    end
+end
+
+function hml.hook.add(name, id, func)
+    if not hml.hook[name] then error('no such hook: '..name) return end
+    hml.hook[name][id] = func
+end
+
+function hml.hook.remove(name, id)
+    if not hml.hook[name] then error('no such hook: '..name) return end
+    hml.hook[name][id] = nil
+end
+
+hml_hookinit('onState','onResize','onMove')
+
+local elementFunc = {
+    draw = {
+        ['text'] = function(el)
+            r.col(el.ecolor)
+            local cx, cy = el.centerx and el.owner.w/2*el.centerx or 6,
+                           el.centery and el.owner.h/2*el.centery or 29
+            r.setFont(el.font)
+            r.drawText(el.owner.x+el.x+cx, el.owner.y+el.y+cy, el.text, el.align)
+        end,
+        ['button'] = function(el)
+            r.col(el.ecolor)
+            local cx, cy = el.centerx and el.owner.w/2*el.centerx or 6,
+                           el.centery and el.owner.h/2*el.centery or 29
+            local sx, sy = el.strw and el.owner.w/2*el.strw+el.w or el.w,
+                           el.strh and el.owner.h/2*el.strh+el.h or el.h
+            el.bcords = {el.owner.x+el.x+cx ,el.owner.y+el.y+cy, sx, sy}
+            local b = el.bcords
+            
+            r.drawRectOutline(unpack(el.bcords))
+            r.setFont(el.font)
+            r.drawText(b[1]+b[3]/2,b[2]+b[4]/2-(el.fonth or 32)/2,el.text or '', TEXT_ALIGN.CENTER)
+            if el.hover then
+                local c = el.ecolor
+                r.col(Color(c[1],c[2],c[3],20))
+                r.drawRect(unpack(el.bcords))
+            end
+        end
+    },
+    update = {
+        ['button'] = function(el)
+            local mx, my = input.getCursorPos()
+            local b = el.bcords
+            el.hover = el.owner == hml.tophover and
+                         mx > b[1] and mx < b[1]+b[3] and
+                         my > b[2] and my < b[2]+b[4] and el.owner.hover
+        end
+    },
+    press = {
+        ['button'] = function(el)
+            if el.hover and not el.owner.drawCorner and not el.owner.lhover then
+                el.func()
+            end
+        end
+    }
+}
+
+function hml.allclosed()
+    local allClosed = true
+    for _, win in pairs(hml.instances_ordered) do
+        if win.open and win.focus then
+            allClosed = false
+            break
+        end
+    end
+    return allClosed
+end
+
+function hml:editTable(tdp)
+    for x, i in pairs(tdp) do
+        self.dp[x] = i or hmlDefaults.window[x]
+    end
+    self.icol_transp  = setCA(self.dp.icolor, self.dp.icolorA)
+end
+function hml:overrideTable(tdp)
+    self.dp = table.copy(hmlDefaults.window)
+    for x, val in pairs(tdp) do
+        self.dp[x] = val
+    end
+    self.open = self.dp.open
+    self.focus = self.dp.focus
+    self.icol_transp  = setCA(self.dp.icolor, self.dp.icolorA)
+end
+
+function hml.new(x, y, w, h, tdp)
+    local wd = setmetatable({},hml)
+    local rw, rh = r.getResolution()
+    wd.w = w
+    wd.h = h
+    wd.x = math.clamp(x,0,rw-wd.w)
+    wd.y = math.clamp(y,0,rh-wd.h)
+    
+    wd:overrideTable(tdp)
+    
+    wd.contents = {}
+    
+    wd.updateGlobal = {lhover, offx, offy, offx2, offy2}
+    
+    
+    wd.cx = w + wd.x-28
+    wd.cy = wd.y + 4
+    wd.cw = 24
+    wd.ch = 20
+    
+    if wd.open and wd.focus then
+        input.enableCursor(true)
+    end
+    
+    wd.index = #hml.instances + 1
+    wd.order = #hml.instances_ordered + 1
+    table.insert(hml.instances, wd)
+    table.insert(hml.instances_ordered, wd)
+    
+    return wd
+end
+
+function hml:destroy()
+    input.enableCursor(not hml.allclosed())
+    table.remove(hml.instances_ordered, self.order)
+    table.remove(hml.instances, self.index)
+end
+
+function hml:state(c)
+    if type(c) ~= 'boolean' then return self.open end
+    self.open = c
+    self.hover = false
+    self.chover = false
+    
+    input.enableCursor(not hml.allclosed())
+    hml_hookcall('onState', self, c)
+    return self.open
+end
+
+function hml:update()
+    if not self.open then return end
+    local mx, my = input.getCursorPos()
+    
+    for _, c in pairs(self.contents) do
+        if not elementFunc.update[c.etype] then continue end
+        elementFunc.update[c.etype](c)
+    end
+    
+    self.hover = mx > self.x and mx < self.x+self.w and
+                 my > self.y and my < self.y+self.h
+    
+    if hml.tophover == self then
+        self.chover = mx > self.cx and mx < self.cx+self.cw and
+                    my > self.cy and my < self.cy+self.ch
+    elseif self.chover then
+        self.chover = false
+    end
+    
+    if hml.tophover ~= self and self.order ~= #hml.instances_ordered then self.drawCorner = nil return end
+    
+    if not input.isMouseDown(107) then
+        self.updateGlobal.lhover = mx > self.x and mx < self.x+self.w and
+                                   my > self.y and my < self.y+28
+                
+        self.updateGlobal.offx = mx - self.x
+        self.updateGlobal.offy = my - self.y
+        
+        self.updateGlobal.offx2 = mx - self.w
+        self.updateGlobal.offy2 = my - self.h
+        
+        if self.dp.lockscale then return end
+        if  mx > self.x+self.w-10 and mx < self.x+self.w and
+            my > self.y+self.h-10 and my < self.y+self.h then
+                
+            self.drawCorner = 2
+            
+        elseif  mx > self.x+self.w-5 and mx < self.x+self.w and
+                my > self.y+30 and my < self.y+self.h then
+            
+            self.drawCorner = 1
+            
+        elseif  mx > self.x and mx < self.x+self.w and
+                my > self.y+self.h-5 and my < self.y+self.h then
+            
+            self.drawCorner = 3
+            
+        else
+            self.drawCorner = nil
+        end
+    else
+        if self.order ~= #hml.instances_ordered then return end
+        local ow, oh = self.w, self.h
+        local ox, oy = self.x, self.y
+        if self.drawCorner then
+            self.w = math.max((self.drawCorner == 1 or self.drawCorner == 2) and mx - self.updateGlobal.offx2 or self.w, self.dp.minw)
+            self.h = math.max((self.drawCorner == 3 or self.drawCorner == 2) and my - self.updateGlobal.offy2 or self.h, self.dp.minh)
+        elseif self.updateGlobal.lhover and not self.dp.lockpos then
+            local rw, rh = r.getResolution()
+            self.x = math.clamp(mx - self.updateGlobal.offx,0,rw-self.w)
+            self.y = math.clamp(my - self.updateGlobal.offy,0,rh-self.h)
+        end
+        self.cx = self.w + self.x-28
+        self.cy = self.y + 4
+        if ow ~= self.w or oh ~= self.h then hml_hookcall('onResize', self, self.w, self.h, ow, oh) end
+        if ox ~= self.x or oy ~= self.y then hml_hookcall('onMove', self, self.x, self.y, ox, oy) end
+    end
+end
+
+function hml:draw()
+    if not self.open then return end
+    if r.drawBlur and self.dp.sfegblur then r.drawBlur(self.x, self.y, self.w, self.h, 8, 3) end
+    r.col(self.icol_transp)
+    r.drawRectOutline(self.x-1,self.y-1,self.w+2,self.h+2)
+    
+    r.col(self.dp.color)
+    r.drawRect(self.x,self.y,self.w,self.h)
+    if self.h > 32 then
+        r.drawRect(self.x+4,self.y+28,self.w-8,self.h-32)
+        r.col(self.icol_transp)
+        local fx, fy, fw, fh = self.x+6, self.y+30, self.w-8, self.h-32
+        r.drawRectOutline(fx-2,fy-2,fw,fh)
+        r.enableScissorRect(fx,fy,self.x+fw,self.y+fh)
+            self.dp.drawfunc(self, fx, fy, fw, fh)
+            for _, c in pairs(self.contents) do
+                if not elementFunc.draw[c.etype] then continue end
+                elementFunc.draw[c.etype](c)
+            end
+        r.disableScissorRect()
+    end
+    
+    r.col(self.dp.icolor)
+    r.setFont(self.dp.lfont)
+    
+    r.enableScissorRect(self.x,self.y,self.x+self.w-32,self.y+self.h)
+        r.drawText(self.x+6,self.y+3,self.dp.label)
+    r.disableScissorRect()
+    
+    r.col(setCA(self.icol_transp, self.chover and 180 or 150))
+    r.drawRect(self.cx,self.cy,self.cw,self.ch)
+    
+    r.col(Color(255,255,255,255))
+    r.setFont(fontX)
+    r.drawText(self.cx+7,self.cy-2,'x')
+    
+    if self.drawCorner ~= nil then
+        local mx, my = input.getCursorPos()
+        local mat = Matrix()
+        mat:setAngles(Angle(0,self.drawCorner*45+45,0))
+        mat:setTranslation(Vector(mx+5,my+10,0)+Angle(0,self.drawCorner*45+45,0):getRight()*(15+math.sin(timer.curtime()*10)*5))
+        r.pushMatrix(mat)
+            r.col(Color(0,0,0,255))
+            r.drawTriangle(-8,1,0,-17,8,1)
+            
+            local c = self.dp.color
+            local ic = self.dp.icolor
+            r.col(setCA((c.r+c.g+c.b) > (ic.r+ic.g+ic.b) and c or ic, 255))
+            r.drawTriangle(-7,0,0,-15,7,0)
+        r.popMatrix()
+    end
+end
+
+function hml:funcmouse(k)
+    if not self.open then return end
+    if k == MOUSE.LEFT then
+        for _, c in pairs(self.contents) do
+            if not elementFunc.press[c.etype] then continue end
+            elementFunc.press[c.etype](c, k)
+        end
+        if self.chover then 
+            self:state(false)
+    elseif self.hover and hml.tophover == self then
+            table.remove(hml.instances_ordered, self.order)
+            table.insert(hml.instances_ordered, self)
+            for x, win in ipairs(hml.instances_ordered) do
+                win.order = x
+            end
+        end
+    end
+end
+
+//******ELEMENTS******//
+    
+    function hmle:editTable(conf)
+        for x, i in pairs(conf) do
+            self[x] = i
+        end
+        if not self.text then return end
+        local hookname = 'hml_fontgetSize'..math.rand(0,10000)+self.index -- for less conflicts
+        hook.add('renderoffscreen',hookname,function()
+            render.setFont(self.font)
+            self.fontw, self.fonth = render.getTextSize(self.text)
+            hook.remove('renderoffscreen',hookname)
+        end)
+    end
+    
+    function hml:newelement(etype, config)
+        local ee = setmetatable({}, hmle)
+        ee.owner = self
+        ee.etype = etype
+        ee.x = config.x or 0
+        ee.y = config.y or 0
+        
+        ee.ecolor = self.dp.icolor
+        ee.w = 50
+        ee.h = 50
+        ee.text = ''
+        ee.font = fontX
+        ee.align = 1
+        ee.func = function() end
+        ee.strw = false
+        ee.strh = false
+        
+        ee.index = #self.contents + 1
+        ee:editTable(config)
+        
+        table.insert(self.contents, ee)
+        return ee
+    end
+    
+    function hmle:destroy()
+        table.remove(self.owner.contents, self.index)
+    end
+
+//******ELEMENTS******//
+
+hook.add('think','hml_WINDOWUPDATE',function()
+    for _, win in ipairs(hml.instances_ordered) do
+        if win.hover and win.open then
+            hml.tophover = win
+        end
+    end
+    for _, win in ipairs(hml.instances_ordered) do
+        win:update()
+    end
+end)
+hook.add('drawhud','hml_DRAWWINDOW',function()
+    for _, win in ipairs(hml.instances_ordered) do
+        win:draw()
+    end
+end)
+hook.add('inputpressed','hml_FUNCWINDOW',function(k)
+    for _, win in ipairs(hml.instances_ordered) do
+        win:funcmouse(k)
+    end
+end)
