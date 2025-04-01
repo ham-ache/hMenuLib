@@ -3,7 +3,9 @@
 --@client
 --@include hmenulib.txt
 require 'hmenulib.txt'
-print('hMenuLib example for v1.1')
+print('hMenuLib example for v1.2')
+
+-- i put no effort into the example, do not judge it
 
 if player() == owner() then enableHud(nil,true) else return end
 local tw2 = hml.new(410,200,500,300,{})
@@ -16,39 +18,48 @@ local tw = hml.new(1010,200,500,300,{
     icolor = Color(100,200,165,255),
     icolorA = 30,
     label = 'a stupid window',
-    lfont = render.createFont('Akbar', 20, 900, false, false, false, false),
+    lfont = render.createFont('Akbar', 20, 900, false, false, false, false, true),
     open = true,
     focus = true,
-    drawfunc = function(win, fx, fy, fw, fh)
-        render.setColor(Color(255,255,255,105)) 
-        render.setMaterial(Img_mat)
-        render.drawTexturedRect(fx,fy,fw*3,fh*6)
+    drawfunc = function(pre, win, fx, fy, fw, fh)
+        if pre then
+            render.setColor(Color(255,255,255,65)) 
+            render.setMaterial(Img_mat)
+            render.drawTexturedRect(fx,fy,fw*2.3,(fh)*3.5)
+            
+            render.setColor(Color(255,255,255,255))
+            render.drawText(fx,fy+25,'stuff drawn before elements')
+        else
+            render.setColor(Color(255,255,255,255))
+            render.drawText(fx,fy+50,'stuff drawn after elements')
+        end
+        render.setColor(Color(255,255,255,255)) -- vvv he is speaking facts!!!!!!!!!!
+        render.drawText(fx,fy,'usually incorrect: drawing in both pre and post')
     end
     --sfegblur = false
-})
-tw:editTable({
-    label = 'a stupid window '..tw.x..'/'..tw.y
 })
 tw2:editTable({
     label = 'Default Window'
 })
-local f2 = render.createFont('Consolas', 16, 900, false, false, false, false)
-for xx = 1, 6 do
+local f2 = render.createFont('Consolas', 16, 900, false, false, false, true)
+for xx = 1, 3 do
     tw:newelement('button', {
                     x = 30, 
                     y = 15,
                     color = nil, 
                     w = -350, 
                     h = 20, 
-                    func = function() print('clicked '..xx) end,
+                    func = function(left)
+                        print('clicked '..xx,'left:',left)
+                    end,
                     text = 'stupid button '..xx,
-                    font = render.createFont('Akbar', 20, 900, false, false, false, false),
+                    font = render.createFont('Akbar', 20, 900, false, false, false, true),
                     centery = xx/4,
                     strw = 2, 
                     strh = 0.05
                 }
             )
-    local b = tw:newelement('text', {
+    tw:newelement('text', {
         x = -20, 
         y = 20, 
         color = false, 
@@ -58,7 +69,20 @@ for xx = 1, 6 do
         centery = xx/4, 
         align = 2
     })
-    --b:destroy()
+end
+
+local names = {'onResize', 'onMove', 'onState'}
+for xx = 1, 3 do
+    local e = tw:newelement('text', {
+        x = 30, 
+        y = -xx*30-8, 
+        color = false, 
+        text = 'hook '..names[xx]..' last triggered: never', 
+        font = f2, 
+        centery = 2, 
+        align = 0
+    })
+    print(e.index)
 end
 local tww = hml.new(760,500,400,500,{
     color = Color(255,245,215,150),
@@ -72,17 +96,16 @@ local tww = hml.new(760,500,400,500,{
 })
 
 hml.hook.add('onResize','hmlexample',function(win, w, h)
-    print('hook onResize triggered: ', win.index, w, h)
+    if not tw.contents[7] then return end
+    tw.contents[7].text = 'hook '..names[1]..' last triggered: '..timer.curtime()..' | id, w, h: '..win.index..' '..w..'/'..h
 end)
 hml.hook.add('onMove','hmlexample',function(win, x, y)
-    print('hook onMove triggered: ', win.index, x, y)
-    if win ~= tw then return end
-    tw:editTable({
-        label = 'a stupid window: '..x..'/'..y
-    })
+    if not tw.contents[8] then return end
+    tw.contents[8].text = 'hook '..names[2]..' last triggered: '..timer.curtime()..' | id, x, y: '..win.index..' '..x..'/'..y
 end)
 hml.hook.add('onState','hmlexample',function(win, c)
-    print('hook onState triggered: ', win.index, c)
+    if not tw.contents[9] then return end
+    tw.contents[9].text = 'hook '..names[3]..' last triggered: '..timer.curtime()..' | id, state: '..win.index..' '..tostring(c)
 end)
 
 local headerfont = render.createFont('Akbar', 40, 900, true, false, false, false)

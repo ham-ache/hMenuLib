@@ -4,7 +4,7 @@
 --[[
 
             hMenuLib by hamache
-            v1.1.1
+            v1.2
             
             hMenuLib: https://steamcommunity.com/sharedfiles/filedetails/?id=3406355320
             hMenuLib example: https://steamcommunity.com/sharedfiles/filedetails/?id=3439675552
@@ -42,7 +42,7 @@
                         lockpos   - make window static
                         lockscale - lock window scaling
                         sfegblur  - enable sfExGIGA blur
-                        drawfunc  - function for drawing your stuff inside the window (available args: window, framex, framey, framew, frameh)
+                        drawfunc  - function for drawing your stuff inside the window (available args: preElements, window, framex, framey, framew, frameh)
             
             hml:editTable(table data)
                     -- edits configurations table
@@ -116,7 +116,7 @@ local hmlDefaults = {
 
 hml = {}
 hml.__index = hml
-hml.version = 'v1.1.1'
+hml.version = 'v1.2'
 hml.instances = {}
 hml.instances_ordered = {}
 hml.tophover = nil
@@ -151,6 +151,17 @@ end
 
 hml_hookinit('onState','onResize','onMove')
 
+local sharedElFunc = {
+    hovcheck = function(el)
+        local mx, my = input.getCursorPos()
+        local b = el.bcords
+        el.hover = el.owner == hml.tophover and
+                   mx > b[1] and mx < b[1]+b[3] and
+                   my > b[2] and my < b[2]+b[4] and el.owner.hover
+                   and not el.owner.drawCorner and not el.owner.lhover and not el.owner.updateGlobal.lhover
+    end,
+}
+
 local elementFunc = {
     draw = {
         ['text'] = function(el)
@@ -180,20 +191,21 @@ local elementFunc = {
         end
     },
     update = {
-        ['button'] = function(el)
-            local mx, my = input.getCursorPos()
-            local b = el.bcords
-            el.hover = el.owner == hml.tophover and
-                         mx > b[1] and mx < b[1]+b[3] and
-                         my > b[2] and my < b[2]+b[4] and el.owner.hover
-        end
+        ['button'] = sharedElFunc.hovcheck,
+        ['input'] = sharedElFunc.hovcheck
     },
     press = {
-        ['button'] = function(el)
-            if el.hover and not el.owner.drawCorner and not el.owner.lhover then
-                el.func()
+        ['button'] = function(el, k)
+            if el.hover then el.func(k) end
+        end,
+        ['input'] = function(el, k)
+            if el.hover and k == MOUSE.LEFT then 
+                if convar.getFloat('sf_input_lock_cooldown') ~= 0 then print('hMenuLib warning: change sf_input_lock_cooldown to 0 (client convar) for no lock cooldown.') end
+                input.lockControls(true)
+            else
+                input.lockControls(false)
             end
-        end
+        end,
     }
 }
 
@@ -351,16 +363,17 @@ function hml:draw()
     r.col(self.dp.color)
     r.drawRect(self.x,self.y,self.w,self.h)
     if self.h > 32 then
-        r.drawRect(self.x+4,self.y+28,self.w-8,self.h-32)
+        local fx, fy, fw, fh = self.x+6, self.y+30, self.w-10, self.h-36
+        r.drawRect(fx,fy,fw-2,fh)
         r.col(self.icol_transp)
-        local fx, fy, fw, fh = self.x+6, self.y+30, self.w-8, self.h-5
-        r.drawRectOutline(fx-2,fy-2,fw,fh-27)
-        r.enableScissorRect(fx,fy,self.x+fw,self.y+fh)
-            self.dp.drawfunc(self, fx, fy, fw, fh)
+        r.drawRectOutline(fx-2,fy-1,fw+2,fh+3)
+        r.enableScissorRect(fx,fy,fx+fw,fy+fh)
+            self.dp.drawfunc(true, self, fx, fy, fw, fh)
             for _, c in pairs(self.contents) do
                 if not elementFunc.draw[c.etype] then continue end
                 elementFunc.draw[c.etype](c)
             end
+            self.dp.drawfunc(false, self, fx, fy, fw, fh)
         r.disableScissorRect()
     end
     
@@ -395,21 +408,22 @@ function hml:draw()
     end
 end
 
-function hml:funcmouse(k)
-    if not self.open then return end
-    if k == MOUSE.LEFT then
-        for _, c in pairs(self.contents) do
-            if not elementFunc.press[c.etype] then continue end
-            elementFunc.press[c.etype](c, k)
-        end
+function hml:funcmouse(orderprocess, k)
+    if not self.open or (k ~= MOUSE.LEFT and k ~= MOUSE.RIGHT) then return end
+    if orderprocess then
         if self.chover then 
             self:state(false)
-    elseif self.hover and hml.tophover == self then
+        elseif self.hover and hml.tophover == self then
             table.remove(hml.instances_ordered, self.order)
             table.insert(hml.instances_ordered, self)
             for x, win in ipairs(hml.instances_ordered) do
                 win.order = x
             end
+        end
+    else
+        for _, c in pairs(self.contents) do
+            if not elementFunc.press[c.etype] then continue end
+            elementFunc.press[c.etype](c, k == 107 and true or false)
         end
     end
 end
@@ -465,17 +479,12 @@ hook.add('think','hml_WINDOWUPDATE',function()
             hml.tophover = win
         end
     end
-    for _, win in ipairs(hml.instances_ordered) do
-        win:update()
-    end
+    for _, win in ipairs(hml.instances_ordered) do win:update() end
 end)
 hook.add('drawhud','hml_DRAWWINDOW',function()
-    for _, win in ipairs(hml.instances_ordered) do
-        win:draw()
-    end
+    for _, win in ipairs(hml.instances_ordered) do win:draw() end
 end)
 hook.add('inputpressed','hml_FUNCWINDOW',function(k)
-    for _, win in ipairs(hml.instances_ordered) do
-        win:funcmouse(k)
-    end
+    for _, win in ipairs(hml.instances_ordered) do win:funcmouse(true, k)  end
+    for _, win in ipairs(hml.instances_ordered) do win:funcmouse(false, k) end
 end)
